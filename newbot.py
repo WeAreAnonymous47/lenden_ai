@@ -10,7 +10,7 @@ from api import fetch_report
 # API KEY (from environment)
 # ==============================
 
-GEMINI_API_KEY = "AIzaSyBXV__Tn-Pdm7LsjBUbKfU58mbWmImkSAs"
+GEMINI_API_KEY = "AIzaSyCYuw7tU14tgl8fkB--J8tji46_Ru0VUXE"
 
 client = genai.Client(api_key=GEMINI_API_KEY)
 
@@ -183,13 +183,17 @@ CHATBOT_PLANS = """
 Lendenclub Lending Plans
 
 Lumpsum:
-25K-5L | 5M | 12-15% XIRR | Monthly  
-25K-5L | 7M | 15-18% XIRR | Monthly  
-1L-5L | 14M | 20-24% XIRR | Monthly  
-1L-5L | 14M | 15-18% XIRR | Daily  
+25K-5L | 5M | 12-15% historical XIRR | Monthly  
+25K-5L | 7M | 15-18% historical XIRR | Monthly  
+1L-5L | 14M | 20-24% historical XIRR | Monthly  
+1L-5L | 14M | 15-18% historical XIRR | Daily  
 
 Manual:
-250-4000 | 2-12M | Variable ROI | Monthly/Daily  
+250-4000 | 2-12M | Variable returns based on borrower | Monthly/Daily  
+
+Important:
+Returns shown are historical trends, not fixed or guaranteed  
+Actual returns depend on borrower performance and real-time loan allocation  
 
 Risk:
 NPA 3-4% avg | Default after 120 days unpaid
@@ -308,7 +312,10 @@ Start direct, no filler
 Behavior:
 Act like advisor  
 Give actionable answers
-Be persuasive, no return guarantee  
+Never say assured returns
+Never say assured returns
+Be persuasive, no return guarantee
+Always use words like "historical", "expected range", or "based on past data"
 
 Hook (must end with question):
 If INFO query → neutral hook  
@@ -329,7 +336,10 @@ Delay/default → reassure + recovery + diversify
 Best plan → ask amount → suggest tenure + return range  
 
 Reminders:
-Returns vary | Diversify | Tenure impacts risk | Fees apply  
+Returns vary | Diversify | Tenure impacts risk | Fees apply
+Never present returns as fixed or guaranteed  
+Always say returns are historical or expected range, not assured  
+Returns depend on real-time loan performance  
 
 Plans:
 {CHATBOT_PLANS}
@@ -341,17 +351,17 @@ Loan need → suggest Instamoney app
 def is_report_request(user_message):
 
     prompt = f"""
-Classify:
-{user_message}
+    Classify:
+    {user_message}
 
-Answer: PERSONAL or GENERAL
-"""
+    Answer: PERSONAL or GENERAL
+    """
 
     result = call_gemini(prompt)
 
     print("result: ", result)
 
-    return "PERSONAL" in result
+    return "PERSONAL" in result.upper()
 
 
 # ==============================
@@ -464,58 +474,198 @@ def is_followup(user_message):
 
 def is_loan_query(msg):
     msg = msg.lower()
-    keywords = ["loan", "borrow", "need money", "apply loan"]
-    return any(k in msg for k in keywords)
 
+    borrow_phrases = [
+        "i want loan",
+        "i need loan",
+        "need money",
+        "borrow money",
+        "apply loan",
+        "get loan",
+        "loan chahiye",
+        "paisa chahiye",
+        "urgent money",
+    ]
+
+    return any(p in msg for p in borrow_phrases)
+
+
+
+def is_lending_context(msg):
+    msg = msg.lower()
+    lending_words = ["lend", "lending", "return", "roi", "risk", "plan"]
+    return any(w in msg for w in lending_words)
 
 # ==============================
 # MAIN CHAT FUNCTION
 # ==============================
 
+# def gemini_prompt(user_message):
+
+#     global memory
+
+#     print("last_messages:", memory['last_messages'])
+#     print("last_summary:", memory['summary'])
+
+#     intent_is_report = is_report_request(user_message)
+#     self_reference = any(x in user_message.lower() for x in ["my", "mine", "me"])
+#     is_follow = is_followup(user_message)
+
+#     # 🧠 Context detection from summary
+#     summary_has_portfolio = "portfolio" in memory["summary"].lower() or "npa" in memory["summary"].lower()
+
+#     if is_loan_query(user_message):
+#         memory["last_topic"] = "LOAN"
+#         memory["summary"] = ""
+#         memory['last_messages'] = []
+
+#         return "Please install Instamoney app to apply for loan.\nWe cannot help with loan application here."
+    
+#     elif "lend" in user_message.lower():
+#         memory["last_topic"] = "LENDING"        
+#     elif not is_follow:
+#         # if new query and not loan → reset topic
+#         memory["last_topic"] = None
+
+#     # ✅ REPORT FLOW (with memory awareness)
+#     if intent_is_report and self_reference:
+#         print("Give me some time will show you the analysis of your report.")
+#         reply = analyze_report(user_message)
+
+#     else:
+#         # query_type = detect_query_type(user_message)
+#         if is_follow:
+#             query_type = "FOLLOWUP"
+#         else:
+#             query_type = detect_query_type(user_message)
+
+#         context = f"""
+#         Conversation Summary:
+#         {memory['summary']}
+
+#         Recent Messages:
+#         {memory['last_messages']}
+#         """
+
+#         prompt = f"""
+#         {SALES_SYSTEM_PROMPT}
+
+#         Query Type: {query_type}
+#         Last Topic: {memory.get("last_topic")}
+
+#         INSTRUCTIONS:
+
+#         - If user asks about loan apply:
+#             ALWAYS say:
+#             "Please install Instamoney app to apply for loan."
+#             "We cannot help with loan application here."
+            
+#             Then STOP.
+#             Do NOT add anything else.
+#             Do NOT ask follow-up question.
+#             Do NOT continue topic again.
+
+#         - If previous topic was LOAN and user says YES:
+#             DO NOT repeat loan answer
+#             Instead switch topic to lending side
+#             Example: explain lending or ask if they want to start lending
+
+#         - If FOLLOWUP:
+#             continue same topic
+#             BUT never repeat same sentence
+#             always add new info OR ask different question
+
+#         - Do NOT restart answer
+#         - Do NOT switch topic randomly
+
+#         - If Query Type = INFO:
+#             give direct answer only
+
+#         - Use very simple language
+#         - Avoid repeating same lines
+
+#         Platform Knowledge:
+#         {FACT_SHEET}
+
+#         {context}
+
+#         Customer Message:
+#         {user_message}
+#         """
+
+#         reply = call_gemini(prompt)
+
+#     # ✅ Update memory after response
+#     update_memory(user_message, reply)
+
+#     return reply
+
+
+
 def gemini_prompt(user_message):
 
     global memory
 
-    print("last_messages:", memory['last_messages'])
-    print("last_summary:", memory['summary'])
+    print("last_messages:", memory.get('last_messages'))
+    print("last_summary:", memory.get('summary'))
 
     intent_is_report = is_report_request(user_message)
     self_reference = any(x in user_message.lower() for x in ["my", "mine", "me"])
     is_follow = is_followup(user_message)
 
-    # 🧠 Context detection from summary
-    summary_has_portfolio = "portfolio" in memory["summary"].lower() or "npa" in memory["summary"].lower()
+    loan_intent = is_loan_query(user_message)
+    lending_context = is_lending_context(user_message)
 
-    if is_loan_query(user_message):
+    # ==============================
+    # 🔥 HARD RULE: LOAN HANDLING (NO LLM)
+    # ==============================
+    if loan_intent and not lending_context:
         memory["last_topic"] = "LOAN"
         memory["summary"] = ""
-        memory['last_messages'] = []
-    elif "lend" in user_message.lower():
-        memory["last_topic"] = "LENDING"        
+        memory["last_messages"] = []
+
+        return "Please install Instamoney app to apply for loan.\nWe cannot help with loan application here."
+
+    # ==============================
+    # 🧠 TOPIC DETECTION / SWITCHING
+    # ==============================
+    if "lend" in user_message.lower():
+        memory["last_topic"] = "LENDING"
+
     elif not is_follow:
-        # if new query and not loan → reset topic
+        # new unrelated query → reset topic
         memory["last_topic"] = None
 
-    # ✅ REPORT FLOW (with memory awareness)
+    # ==============================
+    # 📊 REPORT FLOW
+    # ==============================
     if intent_is_report and self_reference:
         print("Give me some time will show you the analysis of your report.")
         reply = analyze_report(user_message)
 
     else:
-        # query_type = detect_query_type(user_message)
+        # ==============================
+        # 🔍 QUERY TYPE
+        # ==============================
         if is_follow:
             query_type = "FOLLOWUP"
         else:
             query_type = detect_query_type(user_message)
 
+        # ==============================
+        # 🧠 CONTEXT
+        # ==============================
         context = f"""
         Conversation Summary:
-        {memory['summary']}
+        {memory.get('summary')}
 
         Recent Messages:
-        {memory['last_messages']}
+        {memory.get('last_messages')}
         """
 
+        # ==============================
+        # 🤖 PROMPT
+        # ==============================
         prompt = f"""
         {SALES_SYSTEM_PROMPT}
 
@@ -524,34 +674,26 @@ def gemini_prompt(user_message):
 
         INSTRUCTIONS:
 
-        - If user asks about loan apply:
-            ALWAYS say:
-            "Please install Instamoney app to apply for loan."
-            "We cannot help with loan application here."
-            
-            Then STOP.
-            Do NOT add anything else.
-            Do NOT ask follow-up question.
-            Do NOT continue topic again.
-
-        - If previous topic was LOAN and user says YES:
-            DO NOT repeat loan answer
-            Instead switch topic to lending side
-            Example: explain lending or ask if they want to start lending
+        - Always prioritize CURRENT USER MESSAGE over past topic
 
         - If FOLLOWUP:
             continue same topic
-            BUT never repeat same sentence
-            always add new info OR ask different question
+            but never repeat same sentence
+            always add new info or ask new question
+
+        - If user switches topic:
+            switch immediately
+            do not stick to old topic
+
+        - Never assume loan intent unless clearly mentioned
 
         - Do NOT restart answer
-        - Do NOT switch topic randomly
+        - Do NOT repeat same lines
 
         - If Query Type = INFO:
             give direct answer only
 
         - Use very simple language
-        - Avoid repeating same lines
 
         Platform Knowledge:
         {FACT_SHEET}
@@ -564,13 +706,12 @@ def gemini_prompt(user_message):
 
         reply = call_gemini(prompt)
 
-    # ✅ Update memory after response
+    # ==============================
+    # 💾 MEMORY UPDATE
+    # ==============================
     update_memory(user_message, reply)
 
     return reply
-
-
-
 
 
 # if __name__ == "__main__":
