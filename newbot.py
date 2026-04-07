@@ -10,7 +10,7 @@ from api import fetch_report
 # API KEY (from environment)
 # ==============================
 
-GEMINI_API_KEY = "AIzaSyCWeI6tnDWF38XGcATvJwXi90Dq6y8Tkhs"
+GEMINI_API_KEY = "AIzaSyBr8KzGqV9tR5540pakmAboBVrMRTB4OS0"
 
 client = genai.Client(api_key=GEMINI_API_KEY)
 
