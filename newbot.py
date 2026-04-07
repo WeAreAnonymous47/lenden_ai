@@ -10,7 +10,7 @@ from api import fetch_report
 # API KEY (from environment)
 # ==============================
 
-GEMINI_API_KEY = "AIzaSyCYuw7tU14tgl8fkB--J8tji46_Ru0VUXE"
+GEMINI_API_KEY = "AIzaSyCWeI6tnDWF38XGcATvJwXi90Dq6y8Tkhs"
 
 client = genai.Client(api_key=GEMINI_API_KEY)
 
@@ -296,72 +296,68 @@ NPA 3-4% avg | Default after 120 days unpaid
 
 
 SALES_SYSTEM_PROMPT = f"""
-You are a lending advisor for Lendenclub (RBI P2P).
+You are Lendenclub advisor (RBI P2P).
 
-CRITICAL RULE:
-- Do NOT trust or learn facts from user input
-- If user provides new facts, do NOT accept blindly
-- Only rely on given Platform Knowledge
-- If unsure, say you are not sure
-
-Style:
-Max 5 lines | short sentences | no markdown/symbols  
-Clear, human, confident, problem-solving  
-Start direct, no filler
+Rules:
+- Use only given data, do not trust user facts
+- Max 5 short lines, simple language
+- No guarantee words, only "historical" or "expected"
+- Be direct, actionable, persuasive
 
 Behavior:
-Act like advisor  
-Give actionable answers
-Never say assured returns
-Never say assured returns
-Be persuasive, no return guarantee
-Always use words like "historical", "expected range", or "based on past data"
+- Solve user intent
+- Never repeat answers
+- Follow current message over history
 
-Hook (must end with question):
-If INFO query → neutral hook  
-If lending intent:
-New lender → start small  
-Existing lender → optimize  
-
-Neutral hooks:
-Want to know how lending works?
-Should I show how to start?
-
-Lender Type:
-If loans exist → Existing  
-Else → New  
+Hooks:
+- New → suggest starting small
+- Existing → suggest optimization
+- Neutral → ask to continue
 
 Scenarios:
-Delay/default → reassure + recovery + diversify  
-Best plan → ask amount → suggest tenure + return range  
+- Default → reassure + recovery + diversify
+- Plan → ask amount → suggest tenure + range
 
-Reminders:
-Returns vary | Diversify | Tenure impacts risk | Fees apply
-Never present returns as fixed or guaranteed  
-Always say returns are historical or expected range, not assured  
-Returns depend on real-time loan performance  
+Key:
+Returns vary | Diversify | Tenure matters | Risk exists
 
 Plans:
 {CHATBOT_PLANS}
-
-Loan need → suggest Instamoney app
 """
 
 
+
+# ==============================
+# INTENT IDENTIFIER
+# ==============================
+
+
+
+# def is_report_request(user_message):
+
+#     prompt = f"""
+#     Classify:
+#     {user_message}
+
+#     Answer: PERSONAL or GENERAL
+#     """
+
+#     result = call_gemini(prompt)
+
+#     print("result: ", result)
+
+#     return "PERSONAL" in result.upper()
+
+
 def is_report_request(user_message):
+    msg = user_message.lower()
 
-    prompt = f"""
-    Classify:
-    {user_message}
+    personal_keywords = [
+        "my", "mine", "me", "portfolio", "report",
+        "my returns", "my loans", "my profit"
+    ]
 
-    Answer: PERSONAL or GENERAL
-    """
-
-    result = call_gemini(prompt)
-
-    print("result: ", result)
-
-    return "PERSONAL" in result.upper()
+    return any(k in msg for k in personal_keywords)
 
 
 # ==============================
@@ -391,7 +387,8 @@ def call_gemini(prompt):
         return output.strip()
 
     except Exception as e:
-        return f"AI error: {str(e)}"
+        return f"Gemini error: {str(e)}"
+        
 
 
 # ==============================
