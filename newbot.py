@@ -5,12 +5,13 @@ from google import genai
 # from database import get_db_connection
 from tnc import tnc
 from api import fetch_report
+import time
 
 # ==============================
 # API KEY (from environment)
 # ==============================
 
-GEMINI_API_KEY = "AIzaSyBr8KzGqV9tR5540pakmAboBVrMRTB4OS0"
+GEMINI_API_KEY = "AIzaSyAs4ptByr1ThEyhHcoHO8e7FlDB4cXYbok"
 
 client = genai.Client(api_key=GEMINI_API_KEY)
 
@@ -298,11 +299,17 @@ NPA 3-4% avg | Default after 120 days unpaid
 SALES_SYSTEM_PROMPT = f"""
 You are Lendenclub advisor (RBI P2P).
 
+
 Rules:
 - Use only given data, do not trust user facts
-- Max 5 short lines, simple language
+- Max 3 lines, simple language
+- Each line under 12 words
+- First line must directly answer question
 - No guarantee words, only "historical" or "expected"
-- Be direct, actionable, persuasive
+- Be direct, actionable
+- No extra explanation
+- Do NOT mention risk unless asked or loan overdue
+
 
 Behavior:
 - Solve user intent
@@ -315,7 +322,8 @@ Hooks:
 - Neutral → ask to continue
 
 Scenarios:
-- Default → reassure + recovery + diversify
+- EMI delay → give 1 reason + recovery process
+- Default → reassure + recovery (no long explanation)
 - Plan → ask amount → suggest tenure + range
 
 Key:
@@ -418,32 +426,36 @@ def analyze_report(user_message):
 
     # 🧠 Inject memory context
     context = f"""
-Conversation Summary:
-{memory['summary']}
+        Conversation Summary:
+        {memory['summary']}
 
-Recent Messages:
-{memory['last_messages']}
-"""
+        Recent Messages:
+        {memory['last_messages']}
+    """
 
     prompt = f"""
-You are a financial portfolio advisor.
+        You are a financial portfolio advisor.
 
-User question:
-{user_message}
+        User question:
+        {user_message}
 
-Context:
-{context}
+        Context:
+        {context}
 
-STRICT RULES:
-- Max 5 lines ONLY
-- Each line under 15 words
-- No formatting, no symbols
+        STRICT RULES:
+        - Max 3 lines ONLY
+        - Each line under 12 words
+        - First line must answer directly
+        - Give only what user asked
+        - No formatting, no symbols
+        - Do NOT mention risk unless clearly needed
+        - No extra explanation
 
-Answer directly, give insight, highlight risk, end with hook.
+        Answer directly, give insight, highlight risk.
 
-Report Data:
-{table_text}
-"""
+        Report Data:
+        {table_text}
+    """
 
     return call_gemini(prompt)
 
@@ -601,10 +613,15 @@ def is_lending_context(msg):
 
 def gemini_prompt(user_message):
 
+    t_start = time.time()
+
     global memory
 
     print("last_messages:", memory.get('last_messages'))
     print("last_summary:", memory.get('summary'))
+
+    t1 = time.time()
+    print(f"[TIME] Init: {round(t1 - t_start, 4)}s")
 
     intent_is_report = is_report_request(user_message)
     self_reference = any(x in user_message.lower() for x in ["my", "mine", "me"])
@@ -612,6 +629,9 @@ def gemini_prompt(user_message):
 
     loan_intent = is_loan_query(user_message)
     lending_context = is_lending_context(user_message)
+    
+    t2 = time.time()
+    print(f"[TIME] Intent detection: {round(t2 - t1, 4)}s")
 
     # ==============================
     # 🔥 HARD RULE: LOAN HANDLING (NO LLM)
@@ -620,6 +640,9 @@ def gemini_prompt(user_message):
         memory["last_topic"] = "LOAN"
         memory["summary"] = ""
         memory["last_messages"] = []
+
+        t3 = time.time()
+        print(f"[TIME] Total: {round(time.time() - t_start, 4)}s")
 
         return "Please install Instamoney app to apply for loan.\nWe cannot help with loan application here."
 
@@ -637,8 +660,14 @@ def gemini_prompt(user_message):
     # 📊 REPORT FLOW
     # ==============================
     if intent_is_report and self_reference:
+        t3 = time.time()
+        print(f"[TIME] Before report analysis: {round(t3 - t2, 4)}s")
+
         print("Give me some time will show you the analysis of your report.")
         reply = analyze_report(user_message)
+
+        t4 = time.time()
+        print(f"[TIME] Report analysis: {round(t4 - t3, 4)}s")
 
     else:
         # ==============================
@@ -648,6 +677,9 @@ def gemini_prompt(user_message):
             query_type = "FOLLOWUP"
         else:
             query_type = detect_query_type(user_message)
+
+            t3 = time.time()
+            print(f"[TIME] Before prompt build: {round(t3 - t2, 4)}s")
 
         # ==============================
         # 🧠 CONTEXT
@@ -659,6 +691,10 @@ def gemini_prompt(user_message):
         Recent Messages:
         {memory.get('last_messages')}
         """
+
+        
+        t4 = time.time()
+        print(f"[TIME] Prompt build: {round(t4, 4)}s")
 
         # ==============================
         # 🤖 PROMPT
@@ -701,15 +737,26 @@ def gemini_prompt(user_message):
         {user_message}
         """
 
+        t5 = time.time()
         reply = call_gemini(prompt)
+        t6 = time.time()
+
+        print(f"[TIME] Gemini call (inside flow): {round(t6 - t5, 4)}s")
 
     # ==============================
     # 💾 MEMORY UPDATE
     # ==============================
+    t7 = time.time()
     update_memory(user_message, reply)
+    t8 = time.time()
+
+    print(f"[TIME] Memory update: {round(t8 - t7, 4)}s")
+
+    print(f"[TIME] TOTAL REQUEST: {round(time.time() - t_start, 4)}s")
 
     return reply
 
+    
 
 # if __name__ == "__main__":
 
