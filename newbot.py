@@ -11,7 +11,7 @@ import time
 # API KEY (from environment)
 # ==============================
 
-GEMINI_API_KEY = "AIzaSyDD2Et9N_CGZSLOSW0t2XHlYqd5RZ5ooQU"
+GEMINI_API_KEY = "AIzaSyDRYRmZAaZjEUmeb-nE5Imn_bDT9_RniFQ"
 
 client = genai.Client(api_key=GEMINI_API_KEY)
 
