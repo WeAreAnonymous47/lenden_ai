@@ -11,7 +11,7 @@ import time
 # API KEY (from environment)
 # ==============================
 
-GEMINI_API_KEY = "AIzaSyDRYRmZAaZjEUmeb-nE5Imn_bDT9_RniFQ"
+GEMINI_API_KEY = "AIzaSyBP6NsiuThYMKrWaiuYaO13Ob-4A9h-5QA"
 
 client = genai.Client(api_key=GEMINI_API_KEY)
 
@@ -20,11 +20,16 @@ client = genai.Client(api_key=GEMINI_API_KEY)
 # MEMORY (Rolling Summary)
 # ==============================
 
+# memory = {
+#     "summary": "",
+#     "last_messages": []
+# }
+
 memory = {
     "summary": "",
-    "last_messages": []
+    "last_messages": [],
+    "is_new_chat": True   # ✅ NEW FLAG
 }
-
 
 
 def update_memory(user_message, bot_reply):
@@ -34,7 +39,6 @@ def update_memory(user_message, bot_reply):
     if len(memory["last_messages"]) > 2:
         memory["last_messages"].pop(0)
 
-    # simple summary (no API call)
     memory["summary"] = " | ".join(memory["last_messages"])
 
 
@@ -190,9 +194,10 @@ Lumpsum:
 1L-5L | 14M | 15-18% historical XIRR | Daily  
 
 Manual:
-250-4000 | 2-12M | Variable returns based on borrower | Monthly/Daily  
+250-4000 | 2-12M | Variable returns based on borrower | Monthly/Daily
 
 Important:
+Max principal outstanding per lender is ₹50L 
 Returns shown are historical trends, not fixed or guaranteed  
 Actual returns depend on borrower performance and real-time loan allocation  
 
@@ -309,7 +314,10 @@ Rules:
 - Be direct, actionable
 - No extra explanation
 - Do NOT mention risk unless asked or loan overdue
-
+- Max principal per lender is ₹50L
+- If user gives amount > ₹50L:
+  → Do NOT accept full amount
+  → Suggest splitting across accounts or limit to ₹50L
 
 Behavior:
 - Solve user intent
@@ -361,7 +369,7 @@ def is_report_request(user_message):
     msg = user_message.lower()
 
     personal_keywords = [
-        "my", "mine", "me", "portfolio", "report",
+        "my portfolio", "my report",
         "my returns", "my loans", "my profit"
     ]
 
@@ -610,6 +618,12 @@ def is_lending_context(msg):
 #     return reply
 
 
+def is_greeting(msg):
+    msg = msg.lower().strip()
+    greetings = ["hi", "hello", "hey", "hii", "helo", "start"]
+    return any(msg.startswith(g) for g in greetings)
+
+
 
 def gemini_prompt(user_message):
 
@@ -620,6 +634,12 @@ def gemini_prompt(user_message):
     print("last_messages:", memory.get('last_messages'))
     print("last_summary:", memory.get('summary'))
 
+
+    if memory.get("is_new_chat") and is_greeting(user_message):
+        memory["is_new_chat"] = False
+        return "Hi, how can I help you today?"
+    
+    
     t1 = time.time()
     print(f"[TIME] Init: {round(t1 - t_start, 4)}s")
 
@@ -632,7 +652,7 @@ def gemini_prompt(user_message):
     
     t2 = time.time()
     print(f"[TIME] Intent detection: {round(t2 - t1, 4)}s")
-
+    
     # ==============================
     # 🔥 HARD RULE: LOAN HANDLING (NO LLM)
     # ==============================
