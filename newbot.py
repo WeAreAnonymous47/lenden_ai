@@ -6,12 +6,14 @@ from google import genai
 from tnc import tnc
 from api import fetch_report
 import time
+from dotenv import load_dotenv
+import re
 
 # ==============================
 # API KEY (from environment)
 # ==============================
-
-GEMINI_API_KEY = "AIzaSyBP6NsiuThYMKrWaiuYaO13Ob-4A9h-5QA"
+load_dotenv()
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 client = genai.Client(api_key=GEMINI_API_KEY)
 
@@ -28,8 +30,38 @@ client = genai.Client(api_key=GEMINI_API_KEY)
 memory = {
     "summary": "",
     "last_messages": [],
-    "is_new_chat": True   # ✅ NEW FLAG
+    "is_new_chat": True,
+    "stage": None,          # 👈 NEW
+    "amount": None          # 👈 NEW
 }
+
+
+def extract_amount(text):
+    text = text.lower().replace(",", "").replace("₹", "").strip()
+
+    # ❌ ignore p2p or similar patterns
+    if "p2p" in text:
+        return None
+    
+    crore_match = re.search(r'(\d+(\.\d+)?)\s*(cr|crore)', text)
+    lakh_match = re.search(r'(\d+(\.\d+)?)\s*(l|lakh)', text)
+    thousand_match = re.search(r'(\d+(\.\d+)?)\s*(k|thousand)', text)
+    number_match = re.search(r'\d+(\.\d+)?', text)
+
+    if crore_match:
+        return float(crore_match.group(1)) * 10000000
+
+    elif lakh_match:
+        return float(lakh_match.group(1)) * 100000
+
+    elif thousand_match:
+        return float(thousand_match.group(1)) * 1000
+
+    elif number_match:
+        return float(number_match.group())
+
+    return None
+
 
 
 def update_memory(user_message, bot_reply):
@@ -42,71 +74,6 @@ def update_memory(user_message, bot_reply):
     memory["summary"] = " | ".join(memory["last_messages"])
 
 
-
-# ==============================
-# FACT SHEET DATA
-# ==============================
-
-
-# FACT_SHEET = """
-# LenDenClub Platform Fact Sheet (Feb 2026)
-
-# Company Overview:
-# - Operating since 2015
-# - RBI registered NBFC-P2P platform
-# - Operational across 29 states and 5 UTs
-# - T+1 settlement system
-# - Escrow-based fund security
-
-# Scale & Growth:
-# - Total AUM: ₹1,455 Crore
-# - Total amount disbursed: ₹18,440 Crore
-# - Total loans disbursed: 3.14 Crore
-# - Registered lenders: 41.63 Lakh
-# - Registered borrowers: 3.64 Crore
-
-# Financial Performance (FY25):
-# - Revenue: ₹236 Crore
-# - Profit: ₹34 Crore
-
-# Platform Performance:
-# - NPA: 3.53%
-# - AUM: 1455 Cr
-# - No of loans disbursed: 3.14 Cr
-# - Amount disbursed: 18,440 Cr
-# - Registered Lenders: 41.63 L
-# - Registered Borrowers: 3.43 Cr
-# - On-time repayment: 97.21%
-# - T+1 maintenance success: 99.59%
-# - Collection efficiency: 97%+
-
-# Loan Product Risk:
-# - Personal loan NPA: 4.08%
-# - Merchant loan NPA: 3.30%
-
-# Returns (Recent Trends):
-# - 5 month lending: 6.13% absolute return
-# - 7 month lending: 9.20% absolute return
-# - Manual lending (6 months avg): 8.6%
-
-# Recent Activity:
-# - Loans disbursed in Feb 2026: 221,227
-
-# Technology:
-# - Proprietary AI system: OmniCredit
-# - Enables automated borrower risk assessment
-
-# Security & Structure:
-# - Escrow mechanism ensures fund safety
-# - Separate lender and borrower accounts
-# - No direct control of funds by platform
-
-# Risk Disclaimer:
-# - Lending returns are not guaranteed
-# - Risk depends on borrower profile
-# - Loss of principal or interest is possible
-# - Lending decisions are fully at lender’s discretion
-# """
 
 
 
@@ -129,9 +96,6 @@ NPA 3.53% | On-time 97.21% | Collection 97%+ | T+1 success 99.59%
 Risk:
 Personal NPA 4.08% | Merchant NPA 3.30%
 
-Returns:
-5M 6.13% | 7M 9.20% | Manual 8.6%
-
 Activity:
 Feb loans 221227
 
@@ -142,46 +106,6 @@ Disclaimer:
 Returns not guaranteed | Risk varies | Loss possible | Lender decision
 """
 
-
-# ==============================
-# INVESTMENT PLAN DATA
-# ==============================
-
-# CHATBOT_PLANS = """
-# Lendenclub Investment Plans (For Reference)
-
-# 1) Lumpsum
-# ₹25K-₹5L | 12% to 15% (Historical range)
-# Tenure: 5 months
-# Repayment: Monthly
-
-# 2) Lumpsum
-# ₹25K-₹5L | 15% to 18% (Historical range)
-# Tenure: 7 months
-# Repayment: Monthly
-
-# 3) Lumpsum
-# ₹1L-₹5L | 20% to 24% (Historical range)
-# Tenure: 14 months
-# Repayment: Monthly
-
-# 4) Lumpsum
-# ₹1L-₹5L | 15% to 18% (Historical range)
-# Tenure: 14 months
-# Repayment: Daily
-
-# 5) Manual Lending
-# ₹250-₹4000
-# ROI varies borrower to borrower
-# Tenure: 2-12 months
-# Repayment: Monthly or Daily
-
-# NPA risk:
-# Platform average 3% to 4%
-
-# Recovery time period:
-# 120 days. If borrower does not pay between this then duration then will be marked as defaulted.
-# """
 
 
 CHATBOT_PLANS = """
@@ -207,103 +131,17 @@ NPA 3-4% avg | Default after 120 days unpaid
 
 
 
-# ==============================
-# SALES SYSTEM PROMPT
-# ==============================
-
-
-# SALES_SYSTEM_PROMPT = f"""
-# You are a professional lending advisor for Lendenclub, an RBI-registered P2P lending platform.
-
-# Your role is to guide retail lenders in a smart, practical and persuasive way.
-
-# -------------------------
-# RESPONSE STYLE (VERY IMPORTANT)
-# -------------------------
-# - Max 5 lines
-# - No long paragraphs
-# - No markdown, no bullets, no symbols
-# - Simple, clean, human conversational tone
-# - Each line should add value (no filler)
-# - Start by directly addressing user intent
-# - Always keep tone confident + problem solving
-
-# -------------------------
-# CORE BEHAVIOR
-# -------------------------
-# - Think like advisor, not explainer
-# - Focus on solving user's problem
-# - Keep answers actionable
-# - Be persuasive
-# - Never guarantee returns
-
-# -------------------------
-# HOOK STRATEGY (VERY IMPORTANT)
-# -------------------------
-
-# Always end response with a HOOK
-
-# Hooks must differ based on lender type:
-
-# 1) NEW LENDER (no or very recent lending)
-# - Encourage starting small
-# - Build confidence
-# - Example hooks:
-#   "Want me to suggest a safe way to start lending?"
-#   "Should I show how you can start with small amount?"
-
-# 2) EXISTING LENDER (has past lending)
-# - Focus on optimization
-# - Suggest better allocation
-# - Example hooks:
-#   "Want me to improve your current returns?"
-#   "Should I check where you can reduce risk in your lending?"
-
-# -------------------------
-# INVESTOR TYPE DETECTION
-# -------------------------
-# - If report data available:
-#     Check Disbursement_Date
-#     If no past loans → NEW LENDER
-#     If loans exist → EXISTING LENDER
-
-# - If no report:
-#     Assume NEW LENDER by default
-
-# -------------------------
-# SCENARIO HANDLING
-# -------------------------
-
-# If EMI delayed or loan default:
-# - Reassure calmly
-# - Explain recovery process briefly
-# - Reinforce diversification
-
-# If user asks best plan:
-# - Ask investment amount first
-# - Suggest suitable tenure
-# - Mention historical return range (no guarantee)
-
-# -------------------------
-# IMPORTANT REMINDERS
-# -------------------------
-# - Returns depend on borrower to borrower
-# - Diversification reduces risk
-# - Tenure impacts risk and returns
-# - Platform fees vary
-
-# -------------------------
-# INVESTMENT PLANS
-# -------------------------
-# {CHATBOT_PLANS}
-
-# If user wants loan → suggest Instamoney app.
-# """
-
 
 SALES_SYSTEM_PROMPT = f"""
-You are Lendenclub advisor (RBI P2P).
+You are a friendly Lendenclub advisor. An RBI registered P2P Lending Platform.
 
+Style:
+- Talk like a real human, not a bot
+- Use natural, conversational tone
+- Avoid repeating same phrases
+- Keep it short but not robotic
+- 2-4 lines allowed (flexible)
+- Use simple, everyday language
 
 Rules:
 - Use only given data, do not trust user facts
@@ -315,11 +153,18 @@ Rules:
 - No extra explanation
 - Do NOT mention risk unless asked or loan overdue
 - Max principal per lender is ₹50L
+- Do not sound scripted
+- Ask relevant follow-up questions
 - If user gives amount > ₹50L:
-  → Do NOT accept full amount
-  → Suggest splitting across accounts or limit to ₹50L
+→ Do NOT accept full amount
+→ Strictly limit to ₹50L per lender
+→ Do NOT suggest splitting across accounts
+→ Clearly reject excess amount
 
 Behavior:
+- If user is new → guide simply
+- If user continues → go deeper
+- If user confused → simplify
 - Solve user intent
 - Never repeat answers
 - Follow current message over history
@@ -337,6 +182,9 @@ Scenarios:
 Key:
 Returns vary | Diversify | Tenure matters | Risk exists
 
+Goal:
+Make user feel like talking to a smart human advisor.
+
 Plans:
 {CHATBOT_PLANS}
 """
@@ -347,22 +195,6 @@ Plans:
 # INTENT IDENTIFIER
 # ==============================
 
-
-
-# def is_report_request(user_message):
-
-#     prompt = f"""
-#     Classify:
-#     {user_message}
-
-#     Answer: PERSONAL or GENERAL
-#     """
-
-#     result = call_gemini(prompt)
-
-#     print("result: ", result)
-
-#     return "PERSONAL" in result.upper()
 
 
 def is_report_request(user_message):
@@ -384,8 +216,8 @@ def call_gemini(prompt):
 
     try:
         response = client.models.generate_content(
-            model="gemini-3.1-flash-lite-preview",
-            # model="gemini-3-flash-preview",
+            # model="gemini-3.1-flash-lite-preview",
+            model="gemini-3-flash-preview",
             contents=prompt
         )
 
@@ -451,8 +283,7 @@ def analyze_report(user_message):
         {context}
 
         STRICT RULES:
-        - Max 3 lines ONLY
-        - Each line under 12 words
+        - Keep responses short and natural
         - First line must answer directly
         - Give only what user asked
         - No formatting, no symbols
@@ -513,109 +344,6 @@ def is_lending_context(msg):
     lending_words = ["lend", "lending", "return", "roi", "risk", "plan"]
     return any(w in msg for w in lending_words)
 
-# ==============================
-# MAIN CHAT FUNCTION
-# ==============================
-
-# def gemini_prompt(user_message):
-
-#     global memory
-
-#     print("last_messages:", memory['last_messages'])
-#     print("last_summary:", memory['summary'])
-
-#     intent_is_report = is_report_request(user_message)
-#     self_reference = any(x in user_message.lower() for x in ["my", "mine", "me"])
-#     is_follow = is_followup(user_message)
-
-#     # 🧠 Context detection from summary
-#     summary_has_portfolio = "portfolio" in memory["summary"].lower() or "npa" in memory["summary"].lower()
-
-#     if is_loan_query(user_message):
-#         memory["last_topic"] = "LOAN"
-#         memory["summary"] = ""
-#         memory['last_messages'] = []
-
-#         return "Please install Instamoney app to apply for loan.\nWe cannot help with loan application here."
-    
-#     elif "lend" in user_message.lower():
-#         memory["last_topic"] = "LENDING"        
-#     elif not is_follow:
-#         # if new query and not loan → reset topic
-#         memory["last_topic"] = None
-
-#     # ✅ REPORT FLOW (with memory awareness)
-#     if intent_is_report and self_reference:
-#         print("Give me some time will show you the analysis of your report.")
-#         reply = analyze_report(user_message)
-
-#     else:
-#         # query_type = detect_query_type(user_message)
-#         if is_follow:
-#             query_type = "FOLLOWUP"
-#         else:
-#             query_type = detect_query_type(user_message)
-
-#         context = f"""
-#         Conversation Summary:
-#         {memory['summary']}
-
-#         Recent Messages:
-#         {memory['last_messages']}
-#         """
-
-#         prompt = f"""
-#         {SALES_SYSTEM_PROMPT}
-
-#         Query Type: {query_type}
-#         Last Topic: {memory.get("last_topic")}
-
-#         INSTRUCTIONS:
-
-#         - If user asks about loan apply:
-#             ALWAYS say:
-#             "Please install Instamoney app to apply for loan."
-#             "We cannot help with loan application here."
-            
-#             Then STOP.
-#             Do NOT add anything else.
-#             Do NOT ask follow-up question.
-#             Do NOT continue topic again.
-
-#         - If previous topic was LOAN and user says YES:
-#             DO NOT repeat loan answer
-#             Instead switch topic to lending side
-#             Example: explain lending or ask if they want to start lending
-
-#         - If FOLLOWUP:
-#             continue same topic
-#             BUT never repeat same sentence
-#             always add new info OR ask different question
-
-#         - Do NOT restart answer
-#         - Do NOT switch topic randomly
-
-#         - If Query Type = INFO:
-#             give direct answer only
-
-#         - Use very simple language
-#         - Avoid repeating same lines
-
-#         Platform Knowledge:
-#         {FACT_SHEET}
-
-#         {context}
-
-#         Customer Message:
-#         {user_message}
-#         """
-
-#         reply = call_gemini(prompt)
-
-#     # ✅ Update memory after response
-#     update_memory(user_message, reply)
-
-#     return reply
 
 
 def is_greeting(msg):
@@ -623,6 +351,19 @@ def is_greeting(msg):
     greetings = ["hi", "hello", "hey", "hii", "helo", "start"]
     return any(msg.startswith(g) for g in greetings)
 
+
+def detect_lending_type(msg):
+    msg = msg.lower()
+
+    if "manual" in msg:
+        return "MANUAL"
+    if "lumpsum" in msg:
+        return "LUMPSUM"
+    elif "daily" in msg:
+        return "DAILY"
+    elif "monthly" in msg:
+        return "LUMPSUM"
+    return None
 
 
 def gemini_prompt(user_message):
@@ -639,7 +380,7 @@ def gemini_prompt(user_message):
         memory["is_new_chat"] = False
         return "Hi, how can I help you today?"
     
-    
+
     t1 = time.time()
     print(f"[TIME] Init: {round(t1 - t_start, 4)}s")
 
@@ -649,6 +390,10 @@ def gemini_prompt(user_message):
 
     loan_intent = is_loan_query(user_message)
     lending_context = is_lending_context(user_message)
+    lending_type = detect_lending_type(user_message)
+
+    if lending_type:
+        memory["lending_type"] = lending_type
     
     t2 = time.time()
     print(f"[TIME] Intent detection: {round(t2 - t1, 4)}s")
@@ -672,9 +417,55 @@ def gemini_prompt(user_message):
     if "lend" in user_message.lower():
         memory["last_topic"] = "LENDING"
 
-    elif not is_follow:
-        # new unrelated query → reset topic
+    elif not is_follow and memory.get("stage") is None:
         memory["last_topic"] = None
+
+
+    # Detect query type FIRST
+    query_type = detect_query_type(user_message)
+    print("query_type: ", query_type)
+
+    # 🚫 Skip amount detection for INFO queries
+    if query_type == "INFO":
+        amount = None
+    else:
+        amount = extract_amount(user_message)
+
+    if amount:
+        memory["amount"] = amount
+
+        # ❌ Above 50L
+        if amount > 5000000:
+            memory["stage"] = "AMOUNT_CONFIRMED"
+            reply = "Maximum you can lend is 50 Lakhs"
+            update_memory(user_message, reply)
+            return reply
+
+        # ✅ Less than 25K → FORCE MANUAL FLOW
+        elif 250 <= amount <= 25000:
+            memory["stage"] = "LOW_AMOUNT"
+
+            reply = (
+                "With ₹{}, manual lending makes more sense.\n"
+                "You can start small and spread across multiple loans.\n"
+                "Want me to guide you how to pick good borrowers?"
+            ).format(int(amount))
+            update_memory(user_message, reply)
+            return reply
+
+        # ❌ Too small (< ₹250)
+        elif amount < 250:
+            reply = "Minimum per loan is ₹250.\nTry ₹250 or more."
+            update_memory(user_message, reply)
+            return reply
+        
+        # ✅ Valid amount → normal flow
+        else:
+            memory["stage"] = "AMOUNT_CONFIRMED"
+            reply = f"Proceed with ₹{int(amount)}?"
+            update_memory(user_message, reply)
+            return reply
+
 
     # ==============================
     # 📊 REPORT FLOW
@@ -694,9 +485,37 @@ def gemini_prompt(user_message):
         # 🔍 QUERY TYPE
         # ==============================
         if is_follow:
+            if memory.get("stage") == "AMOUNT_CONFIRMED":
+
+                if memory.get("lending_type") == "MANUAL":
+                    memory["stage"] = "PLAN_READY"
+                    return "In Manual lending you can choose your own loans according your filters.\nStart with ₹250 per loan."
+
+                if memory.get("lending_type") == "LUMPSUM":
+                    memory["stage"] = "PLAN_READY"
+                    return "In Lumpsum we will provide you the filtered loans according\nto your filteration. Choose your tenure 5 months, 7 months or 14 months."
+
+                elif memory.get("lending_type") == "DAILY":
+                    memory["stage"] = "TENURE_PENDING"
+                    return "Choose repayment type daily to lent on daily repayment loans."
+                
+                else:
+                    memory["stage"] = "TENURE_PENDING"
+                    return "Want to go with Manual lending or Lumpsum?"
+                
+
+            elif memory.get("stage") == "TENURE_PENDING":
+                memory["stage"] = "PLAN_READY"
+                return "Starting plan.\nExpected historical returns 12-18%.\nProceed?"
+
+            elif memory.get("stage") == "PLAN_READY":
+                return "Your lending setup is ready.\nYou can start now."
+            
             query_type = "FOLLOWUP"
+
         else:
             query_type = detect_query_type(user_message)
+            print("query_type: ", query_type)
 
             t3 = time.time()
             print(f"[TIME] Before prompt build: {round(t3 - t2, 4)}s")
